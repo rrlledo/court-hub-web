@@ -16,6 +16,7 @@ import ReportsView from '@/views/ReportsView.vue'
 import NotificationsView from '@/views/NotificationsView.vue'
 import FrontDeskView from '@/views/FrontDeskView.vue'
 import AdministrationView from '@/views/AdministrationView.vue'
+import SuperAdminView from '@/views/SuperAdminView.vue'
 import RegisterView from '@/views/RegisterView.vue'
 import ForgotPasswordView from '@/views/ForgotPasswordView.vue'
 import ResetPasswordView from '@/views/ResetPasswordView.vue'
@@ -43,6 +44,7 @@ const router = createRouter({
     { path: '/notifications', name: 'notifications', component: NotificationsView },
     { path: '/front-desk', name: 'front-desk', component: FrontDeskView },
     { path: '/administration', name: 'administration', component: AdministrationView },
+    { path: '/super-admin', name: 'super-admin', component: SuperAdminView },
   ],
 })
 

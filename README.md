@@ -26,6 +26,7 @@ See [FUNCTIONALITY_AUDIT.md](FUNCTIONALITY_AUDIT.md) for implemented workflows a
 - Responsive operations dashboard wired to `/reports/dashboard`
 - Guided organization, facility, branch, and active-court setup backed by the Laravel API
 - Complete booking workflow: visual court timeline, availability, online/walk-in/QR reservation creation, confirmation, cancellation, rescheduling, recurring schedules, refund requests, QR codes, and personal history
+- Player booking checkout through PayMongo, with server-side status refresh after returning from the hosted checkout
 - Membership plan setup, signed-in-user activation, card generation, session usage/history, freeze/resume, renewal, and cancellation
 - Tenant user creation, role assignment, removal, and member selection during membership activation
 - Rental inventory, equipment checkout, and return processing
@@ -47,6 +48,6 @@ See [FUNCTIONALITY_AUDIT.md](FUNCTIONALITY_AUDIT.md) for implemented workflows a
 npm run build
 ```
 
-## Next development slice
+## Remaining web refinements
 
-Build the booking calendar timeline, then add dedicated facility/court/branch pickers wherever operations still require an ID.
+The web app adapts its navigation, grids, forms, and touch targets for tablet and phone widths. Sign-in asks for an authenticator code when the API requires it. Front desk can scan a QR code through browsers that implement `BarcodeDetector`, with a manual-code fallback. Rentals and tournament match scheduling use player, inventory, facility, branch, and court selectors.

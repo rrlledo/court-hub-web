@@ -76,9 +76,9 @@ After creating a player, return to **Memberships** and select them in the Member
 
 ## Rentals and payments
 
-Open **Rentals** to add inventory and check out equipment. Inventory creation requires the branch ID; copy it from the branch data in Postman/API documentation until branch selection is added to this screen. Select an item, quantity, and optional due date to check it out. Use **Return** to close an active rental.
+Open **Rentals** to select a facility and branch when adding inventory. For checkout, select the player, inventory item, quantity, and due date. Use **Return**, **Extend**, or **Close/damage** to manage an active rental.
 
-Open **Payments** to create a payment intent for an activated membership. Select the membership, amount, payment method, and supported provider (PayMongo or Xendit). The app records a pending intent; provider webhook processing updates the final payment status. Refund buttons create a refund request—they do not independently transfer funds. In **Payment operations**, enter a payment ID to view its invoice, or view the tenant reconciliation total and configured providers.
+Open **Payments** to create checkout for an activated membership. Select the membership and a supported method (GCash, Maya, or card); the server derives the amount from the membership plan. When local Xendit simulation is enabled, choose **Xendit (simulated)** to complete without contacting a provider. Otherwise choose PayMongo and return to Court Hub after its hosted checkout. Refund buttons create a refund request; only the local Xendit simulation completes its mock refund automatically. In **Payment operations**, enter a payment ID to view its invoice or view the tenant reconciliation total.
 
 ## Account settings
 
@@ -87,26 +87,26 @@ Open **Settings** to update your profile, resend an email-verification link, cha
 ## Coaching, tournaments, and facility operations
 
 - **Coaching:** Add a coach with an hourly rate, then select the coach and session times to schedule a lesson. Scheduled sessions can be completed or cancelled. In **Coach operations**, enter the coach ID to replace that coach's weekly availability with the entered time slot, or view completed-session revenue.
-- **Tournaments:** Create a tournament using its branch ID, format, and start time. Players can use **Register me** while the tournament is open for registration. In **Match management**, select the tournament, schedule matches from its registrations, and record a score plus the winning player. The ordered Round and Match columns provide the operational bracket view.
+- **Tournaments:** Create a tournament by selecting its facility and branch, format, and start time. Players can use **Register me** while the tournament is open for registration. In **Match management**, select the tournament, schedule matches from its registrations, and record a score plus the winning player. The ordered Round and Match columns provide the operational bracket view. Match scheduling still accepts court and registration IDs.
 - **Operations:** Select a facility, then its branch and court, before managing operating hours, closures, maintenance, or time-based pricing rules. Court types are managed as a reusable catalog with a name, sport, and description. These controls affect booking availability and pricing in the API.
 
-Operations now uses facility, branch, and court pickers. Some specialized front-desk, rentals, and tournament forms still accept record IDs until their dedicated picker enhancement is completed.
+Operations, tournament creation, and front-desk check-in/waitlist use facility, branch, court, or booking pickers where applicable. Rental inventory and tournament match scheduling still accept record IDs until their dedicated picker enhancement is completed.
 
 ## Reports, notifications, and booking enhancements
 
 - **Reports:** Select a detailed report and optionally filter by start and end date. Dashboard metrics show current tenant summaries.
 - **Notifications:** Read inbox messages, mark them read, and save email, SMS, or push preferences.
-- **Bookings:** Use **Reschedule** to enter a new start and end time, or **QR code** to generate the code used by the check-in API. QR check-in scanning remains a planned dedicated front-desk screen.
+- **Bookings:** Use **Reschedule** to enter a new start and end time, or **QR code** to generate the code used by the check-in API. Front-desk users can use their browser camera to scan this QR code when the browser supports `BarcodeDetector`; a paste field is always available.
 
 ## Front desk
 
-Open **Front Desk** to validate a generated booking QR code, manually check in a confirmed booking by booking ID, or add a guest to a waitlist. These actions require an authorized court-owner, facility-manager, or front-desk account. Court and booking IDs are available from the booking records until picker controls are added.
+Open **Front Desk** to validate a generated booking QR code, manually check in a confirmed booking from the selector, or add a guest to a selected court's waitlist. Choose **Use camera** to scan a QR code in supported browsers, or paste the code when camera scanning is unavailable. These actions require an authorized court-owner, facility-manager, or front-desk account.
 
 ## Account and access notes
 
 - Sign in with a tenant-owner account to set up facilities and courts.
 - Bearer-token sessions are stored only in the current browser profile. Select **Sign out** when you finish on a shared device.
-- If the backend has two-factor authentication enabled for your account, include the current authenticator code when logging in through the API. A dedicated web 2FA prompt is a future enhancement.
+- If the backend has two-factor authentication enabled for your account, enter the current authenticator code when the sign-in page asks for it.
 
 ## Troubleshooting
 
@@ -131,4 +131,4 @@ Open **Front Desk** to validate a generated booking QR code, manually check in a
 - Coaching, tournaments, facility closures, maintenance, and pricing-rule creation
 - Reporting, notification preferences, booking rescheduling, and QR-code generation
 
-Coaching, tournaments, rentals, reporting detail, and settings remain planned frontend modules; their API endpoints are already available.
+All currently exposed coaching, tournament, rental, reporting, and settings workflows have web screens. The responsive navigation collapses into a menu on small screens, while wide tables retain horizontal scrolling so their data remains usable on phones and tablets.

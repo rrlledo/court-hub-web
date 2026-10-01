@@ -2,19 +2,23 @@
 import { computed, ref } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { api, type ApiList } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import BookingTimelineView from '@/views/BookingTimelineView.vue'
 
 type Facility = { id: number; name: string }
 type Branch = { id: number; name: string; facility_id: number }
 type Court = { id: number; name: string; sport?: string; status: string; base_price: number }
 type Booking = { id: number; reference: string; court_id: number; starts_at: string; ends_at: string; status: string; amount: number; currency: string; expires_at?: string | null; notes?: string | null }
+type PaymentProvider = { name: 'paymongo' | 'xendit'; configured: boolean; mock?: boolean }
 
 const queryClient = useQueryClient()
+const auth = useAuthStore()
 const today = new Date().toISOString().slice(0, 10)
 const date = ref(today); const facilityId = ref<number>(); const branchId = ref<number>(); const courtId = ref<number>()
 const startTime = ref('09:00'); const endTime = ref('10:00'); const notes = ref(''); const submitError = ref(''); const submitting = ref(false)
 const bookingMode = ref<'standard' | 'walk-in' | 'qr'>('standard')
 const actionError = ref(''); const actionSuccess = ref(''); const actionBusyId = ref<number>()
+const paymentBooking = ref<Booking>(); const paymentMethod = ref('gcash'); const paymentProvider = ref<'paymongo' | 'xendit'>('paymongo')
 const recurringDay = ref(1); const recurringDuration = ref(60); const recurringStarts = ref(today); const recurringEnds = ref('')
 const facilities = useQuery({ queryKey: ['facilities'], queryFn: async () => (await api.get<ApiList<Facility>>('/facilities')).data.data })
 const branches = useQuery({ queryKey: ['branches', facilityId], enabled: computed(() => Boolean(facilityId.value)), queryFn: async () => (await api.get<ApiList<Branch>>(`/facilities/${facilityId.value}/branches`)).data.data })
@@ -22,6 +26,7 @@ const courts = useQuery({ queryKey: ['courts', branchId], enabled: computed(() =
 const bookings = useQuery({ queryKey: ['bookings', date], queryFn: async () => (await api.get<ApiList<Booking>>('/bookings', { params: { date: date.value } })).data.data })
 const availability = useQuery({ queryKey: ['availability', courtId, date], enabled: computed(() => Boolean(courtId.value)), queryFn: async () => (await api.get(`/courts/${courtId.value}/availability`, { params: { date: date.value } })).data.data.data })
 const history = useQuery({ queryKey: ['booking-history'], queryFn: async () => { const { data } = await api.get('/bookings/history'); return data.data?.data ?? data.data ?? [] } })
+const providers = useQuery({ queryKey: ['payment-providers'], queryFn: async () => (await api.get('/payments/providers')).data.data ?? [] })
 
 const facilityOptions = computed<Facility[]>(() => facilities.data.value ?? [])
 const branchOptions = computed<Branch[]>(() => branches.data.value ?? [])
@@ -30,17 +35,22 @@ const bookingList = computed<Booking[]>(() => bookings.data.value ?? [])
 const selectedCourt = computed(() => courtOptions.value.find((court) => court.id === courtId.value))
 const selectedBookings = computed<Booking[]>(() => availability.data.value?.bookings?.data ?? availability.data.value?.bookings ?? [])
 const historyList = computed<Booking[]>(() => history.data.value ?? [])
+const providerOptions = computed<PaymentProvider[]>(() => (providers.data.value ?? []).filter((provider: PaymentProvider) => provider.configured))
 function resetBranch() { branchId.value = undefined; courtId.value = undefined }
 function resetCourt() { courtId.value = undefined }
 function money(value: number) { return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value ?? 0)) }
 function formatTime(iso: string) { return new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' }).format(new Date(iso)) }
 function statusLabel(value: string) { return value.replace('_', ' ') }
-function canConfirm(booking: Booking) { return booking.status === 'reserved' && (!booking.expires_at || new Date(booking.expires_at) > new Date()) }
+const isPlayer = computed(() => auth.user?.roles?.includes('player') === true)
+const isStaff = computed(() => auth.user?.roles?.some((role) => ['court-owner', 'facility-manager', 'front-desk'].includes(role)) === true)
+function canConfirm(booking: Booking) { return isStaff.value && booking.status === 'reserved' && (!booking.expires_at || new Date(booking.expires_at) > new Date()) }
 function canCancel(booking: Booking) { return !['cancelled', 'expired'].includes(booking.status) }
+function canPay(booking: Booking) { return isPlayer.value && booking.status === 'reserved' && (!booking.expires_at || new Date(booking.expires_at) > new Date()) }
 async function refreshBookingData() {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['bookings'] }),
     queryClient.invalidateQueries({ queryKey: ['availability'] }),
+    queryClient.invalidateQueries({ queryKey: ['booking-history'] }),
   ])
 }
 async function createBooking() {
@@ -50,8 +60,11 @@ async function createBooking() {
   submitting.value = true
   try {
     const endpoint = bookingMode.value === 'walk-in' ? '/bookings/walk-in' : bookingMode.value === 'qr' ? '/bookings/qr' : '/bookings'
-    await api.post(endpoint, { court_id: courtId.value, starts_at: `${date.value}T${startTime.value}:00`, ends_at: `${date.value}T${endTime.value}:00`, notes: notes.value || undefined })
+    const response = await api.post(endpoint, { court_id: courtId.value, starts_at: `${date.value}T${startTime.value}:00`, ends_at: `${date.value}T${endTime.value}:00`, notes: notes.value || undefined })
     notes.value = ''
+    const booking = response.data.data ?? response.data
+    if (bookingMode.value === 'standard' && isPlayer.value) paymentBooking.value = booking
+    actionSuccess.value = `Booking ${booking.reference ?? ''} was reserved.`
     await refreshBookingData()
   } catch (caught: any) { submitError.value = caught.response?.data?.message ?? 'The reservation could not be created.' }
   finally { submitting.value = false }
@@ -73,6 +86,54 @@ async function bookingTool(booking: Booking, tool: 'qr' | 'reschedule') {
     if (tool === 'qr') { const { data } = await api.post(`/bookings/${booking.id}/qr-code`); actionSuccess.value = `QR code: ${(data.data ?? data).qr_code}` }
     else { const startsAt = window.prompt('New start (YYYY-MM-DDTHH:mm)', booking.starts_at.slice(0, 16)); const endsAt = window.prompt('New end (YYYY-MM-DDTHH:mm)', booking.ends_at.slice(0, 16)); if (!startsAt || !endsAt) return; await api.patch(`/bookings/${booking.id}/reschedule`, { starts_at: startsAt, ends_at: endsAt }); actionSuccess.value = `Booking ${booking.reference} was rescheduled.`; await refreshBookingData() }
   } catch (caught: any) { actionError.value = caught.response?.data?.message ?? 'Booking action could not be completed.' }
+  finally { actionBusyId.value = undefined }
+}
+function openBookingCheckout(booking: Booking) {
+  paymentBooking.value = booking
+  actionError.value = ''
+  actionSuccess.value = ''
+}
+async function startBookingCheckout() {
+  const booking = paymentBooking.value
+  if (!booking) return
+  const provider = providerOptions.value.some((item) => item.name === paymentProvider.value)
+    ? paymentProvider.value
+    : providerOptions.value[0]?.name
+  if (!provider) { actionError.value = 'No payment provider is configured for this environment.'; return }
+  paymentProvider.value = provider
+  actionError.value = ''; actionSuccess.value = ''; actionBusyId.value = booking.id
+  try {
+    const response = await api.post('/payments/intents', { booking_id: booking.id, provider, method: paymentMethod.value })
+    if (provider === 'xendit') {
+      const paymentId = response.data?.data?.payment?.id
+      if (!paymentId) throw Error('The simulated payment could not be prepared.')
+      await api.post(`/payments/mock/xendit/${paymentId}/complete`)
+      actionSuccess.value = `Simulated Xendit payment received — ${booking.reference} is confirmed.`
+      paymentBooking.value = undefined
+      await refreshBookingData()
+      return
+    }
+    const checkoutUrl = response.data?.data?.checkout_url
+    if (typeof checkoutUrl !== 'string') { actionSuccess.value = 'Checkout is still being prepared. Use Check payment status before trying again.'; return }
+    const url = new URL(checkoutUrl)
+    if (url.protocol !== 'https:' || url.hostname !== 'checkout.paymongo.com') throw Error('The payment provider returned an invalid checkout URL.')
+    window.location.assign(url.toString())
+  } catch (caught: any) { actionError.value = caught.response?.data?.message ?? caught.message ?? 'Payment checkout could not be created.' }
+  finally { actionBusyId.value = undefined }
+}
+async function checkBookingPayment(booking: Booking) {
+  actionError.value = ''; actionSuccess.value = ''; actionBusyId.value = booking.id
+  try {
+    const response = await api.get(`/bookings/${booking.id}/payment-status`)
+    const result = response.data?.data ?? response.data
+    const status = result.payment?.status
+    actionSuccess.value = status === 'paid' && result.booking?.status === 'confirmed'
+      ? `Payment received — ${booking.reference} is confirmed.`
+      : status === 'paid_review'
+        ? 'Payment received but needs facility review. Do not pay again.'
+        : status ? `Payment status: ${status.replace('_', ' ')}.` : 'No checkout has been started for this booking.'
+    await refreshBookingData()
+  } catch (caught: any) { actionError.value = caught.response?.data?.message ?? 'Payment status could not be checked.' }
   finally { actionBusyId.value = undefined }
 }
 async function createRecurring() {
@@ -100,6 +161,7 @@ async function requestRefund(booking: Booking) {
     <article class="panel"><div class="panel-heading"><div><h2>Court availability</h2><p class="muted">{{ courtId ? `Schedule for ${date}` : 'Choose a court to view its schedule.' }}</p></div></div><div v-if="availability.isLoading.value" class="empty-state small">Loading court schedule…</div><div v-else-if="availability.data.value?.is_closed" class="empty-state small"><h3>Branch closed</h3><p>This branch is not accepting bookings on the selected date.</p></div><div v-else-if="courtId" class="schedule-list"><div v-if="!selectedBookings.length" class="schedule-empty">No active bookings for this court.</div><article v-for="booking in selectedBookings" :key="booking.id" class="schedule-item"><div><strong>{{ formatTime(booking.starts_at) }} – {{ formatTime(booking.ends_at) }}</strong><span>{{ booking.reference }}</span></div><span :class="['status-pill', booking.status]">{{ statusLabel(booking.status) }}</span></article></div><div v-else class="empty-state small"><span>◷</span><h3>Select a court</h3><p>Its current bookings and availability will appear here.</p></div></article>
   </section>
   <BookingTimelineView :date="date" :court-name="selectedCourt?.name" :availability="availability.data.value" />
+  <section v-if="paymentBooking" class="panel booking-form payment-form"><div class="panel-heading"><div><h2>Pay for {{ paymentBooking.reference }}</h2><p class="muted">Court Hub verifies payment before confirming the reservation.</p></div><button class="table-button" :disabled="actionBusyId === paymentBooking.id" @click="paymentBooking = undefined">Close</button></div><div class="form-grid"><label>Provider<select v-model="paymentProvider"><option v-for="provider in providerOptions" :key="provider.name" :value="provider.name">{{ provider.mock ? 'Xendit (simulated)' : 'PayMongo' }}</option></select></label><label>Payment method<select v-model="paymentMethod"><option value="gcash">GCash</option><option value="maya">Maya</option><option value="card">Card</option></select></label></div><p class="muted">The server calculates the booking amount. Simulated Xendit checkout completes in this app; PayMongo returns from its hosted checkout for status verification.</p><button class="primary-button" :disabled="actionBusyId === paymentBooking.id || !providerOptions.length" @click="startBookingCheckout">{{ paymentProvider === 'xendit' ? 'Complete simulated payment' : 'Continue to secure checkout' }}</button></section>
   <section class="panel booking-form recurring-form"><h2>Recurring reservation</h2><form @submit.prevent="createRecurring"><div class="form-grid"><label>Day of week<select v-model.number="recurringDay"><option v-for="(day, index) in ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']" :key="day" :value="index">{{ day }}</option></select></label><label>Duration (minutes)<input v-model.number="recurringDuration" type="number" min="30" /></label><label>Starts on<input v-model="recurringStarts" type="date" /></label><label>Ends on<input v-model="recurringEnds" type="date" /></label></div><button class="secondary-button">Create recurring schedule</button></form></section>
-  <section class="panel bookings-table"><div class="panel-heading"><div><h2>Bookings for {{ date }}</h2><p class="muted">All reservation activity for your tenant.</p></div><span v-if="bookings.isFetching" class="table-status">Refreshing…</span></div><p v-if="actionSuccess" class="action-message success">{{ actionSuccess }}</p><p v-if="actionError" class="action-message error">{{ actionError }}</p><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Court</th><th>Time</th><th>Amount</th><th>Status</th><th class="actions-column">Actions</th></tr></thead><tbody><tr v-if="!bookingList.length"><td colspan="6" class="table-empty">No bookings found for this date.</td></tr><tr v-for="booking in bookingList" :key="booking.id"><td><strong>{{ booking.reference }}</strong></td><td>#{{ booking.court_id }}</td><td>{{ formatTime(booking.starts_at) }} – {{ formatTime(booking.ends_at) }}</td><td>{{ money(booking.amount) }}</td><td><span :class="['status-pill', booking.status]">{{ statusLabel(booking.status) }}</span></td><td><div class="row-actions"><button v-if="canConfirm(booking)" class="table-button confirm" :disabled="actionBusyId === booking.id" @click="updateBooking(booking, 'confirm')">Confirm</button><button v-if="canCancel(booking)" class="table-button cancel" :disabled="actionBusyId === booking.id" @click="updateBooking(booking, 'cancel')">Cancel</button><button v-if="canCancel(booking)" class="table-button" :disabled="actionBusyId === booking.id" @click="bookingTool(booking, 'reschedule')">Reschedule</button><button v-if="booking.status === 'confirmed'" class="table-button" :disabled="actionBusyId === booking.id" @click="requestRefund(booking)">Refund</button><button class="table-button" :disabled="actionBusyId === booking.id" @click="bookingTool(booking, 'qr')">QR code</button></div></td></tr></tbody></table></div></section><section class="panel bookings-table"><h2>My booking history</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Date</th><th>Status</th></tr></thead><tbody><tr v-if="!historyList.length"><td colspan="3" class="table-empty">No previous bookings.</td></tr><tr v-for="booking in historyList" :key="booking.id"><td>{{ booking.reference }}</td><td>{{ booking.starts_at }}</td><td><span :class="['status-pill', booking.status]">{{ statusLabel(booking.status) }}</span></td></tr></tbody></table></div></section>
+  <section class="panel bookings-table"><div class="panel-heading"><div><h2>Bookings for {{ date }}</h2><p class="muted">All reservation activity for your tenant.</p></div><span v-if="bookings.isFetching" class="table-status">Refreshing…</span></div><p v-if="actionSuccess" class="action-message success">{{ actionSuccess }}</p><p v-if="actionError" class="action-message error">{{ actionError }}</p><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Court</th><th>Time</th><th>Amount</th><th>Status</th><th class="actions-column">Actions</th></tr></thead><tbody><tr v-if="!bookingList.length"><td colspan="6" class="table-empty">No bookings found for this date.</td></tr><tr v-for="booking in bookingList" :key="booking.id"><td><strong>{{ booking.reference }}</strong></td><td>#{{ booking.court_id }}</td><td>{{ formatTime(booking.starts_at) }} – {{ formatTime(booking.ends_at) }}</td><td>{{ money(booking.amount) }}</td><td><span :class="['status-pill', booking.status]">{{ statusLabel(booking.status) }}</span></td><td><div class="row-actions"><button v-if="canPay(booking)" class="table-button confirm" :disabled="actionBusyId === booking.id" @click="openBookingCheckout(booking)">Pay</button><button v-if="isPlayer && ['reserved', 'confirmed'].includes(booking.status)" class="table-button" :disabled="actionBusyId === booking.id" @click="checkBookingPayment(booking)">Check payment</button><button v-if="canConfirm(booking)" class="table-button confirm" :disabled="actionBusyId === booking.id" @click="updateBooking(booking, 'confirm')">Confirm</button><button v-if="canCancel(booking)" class="table-button cancel" :disabled="actionBusyId === booking.id" @click="updateBooking(booking, 'cancel')">Cancel</button><button v-if="canCancel(booking)" class="table-button" :disabled="actionBusyId === booking.id" @click="bookingTool(booking, 'reschedule')">Reschedule</button><button v-if="isStaff && booking.status === 'confirmed'" class="table-button" :disabled="actionBusyId === booking.id" @click="requestRefund(booking)">Refund</button><button class="table-button" :disabled="actionBusyId === booking.id" @click="bookingTool(booking, 'qr')">QR code</button></div></td></tr></tbody></table></div></section><section class="panel bookings-table"><h2>My booking history</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Date</th><th>Status</th></tr></thead><tbody><tr v-if="!historyList.length"><td colspan="3" class="table-empty">No previous bookings.</td></tr><tr v-for="booking in historyList" :key="booking.id"><td>{{ booking.reference }}</td><td>{{ booking.starts_at }}</td><td><span :class="['status-pill', booking.status]">{{ statusLabel(booking.status) }}</span></td></tr></tbody></table></div></section>
 </template>

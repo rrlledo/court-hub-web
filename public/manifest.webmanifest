@@ -1,0 +1,9 @@
+{
+  "name": "Court Hub",
+  "short_name": "Court Hub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f5",
+  "theme_color": "#0b5d52",
+  "icons": [{"src": "/icons/court-hub.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}]
+}
