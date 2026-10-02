@@ -32,6 +32,10 @@ Before a live web release, follow [`../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md`](
 
 See [FUNCTIONALITY_AUDIT.md](FUNCTIONALITY_AUDIT.md) for implemented workflows and advanced backend endpoints that still need dedicated UI screens.
 
+## Role-based user guides
+
+Step-by-step guides for Super Admin, Court Owner, Facility Manager, Front Desk, Coach, Event Organizer, and Player are in [`../docs/user-guides/README.md`](../docs/user-guides/README.md). The guides identify the web and mobile workspace for each role and their access boundaries.
+
 ## Current foundation
 
 - Secure bearer-token session handling and authenticated route guard
