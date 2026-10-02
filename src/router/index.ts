@@ -53,6 +53,10 @@ router.beforeEach(async (to) => {
   if (auth.isAuthenticated && !auth.user) await auth.hydrate()
   if (!to.meta.public && !auth.isAuthenticated) return { name: 'login' }
   if (to.meta.public && auth.isAuthenticated) return { name: 'dashboard' }
+
+  const isSuperAdmin = auth.user?.roles?.includes('super-admin') ?? false
+  if (isSuperAdmin && to.name !== 'super-admin') return { name: 'super-admin' }
+  if (!isSuperAdmin && to.name === 'super-admin') return { name: 'dashboard' }
 })
 
 export default router
