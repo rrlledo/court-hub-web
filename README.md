@@ -15,6 +15,21 @@ npm run dev
 
 Open `http://127.0.0.1:5173`. Use **Create facility account** to create a tenant owner, or sign in with an existing account. See [USER_GUIDE.md](USER_GUIDE.md) for first-time setup and day-to-day instructions.
 
+## API base URLs
+
+| Target | Base URL |
+| --- | --- |
+| Local browser | `http://127.0.0.1:8000/api/v1` |
+| Android emulator | `http://10.0.2.2:8000/api/v1` |
+| Staging | `https://api.staging.example.com/api/v1` (replace with the deployed hostname) |
+| Production | `https://api.example.com/api/v1` (replace with the deployed hostname) |
+
+## Local, staging, and production environments
+
+Copy `.env.local.example` to `.env.local` for local development. For staging, copy `.env.staging.example` to `.env.staging` and use `npm run dev:staging` or `npm run build:staging`. For production, populate `.env.production` from its template on the CI runner and use `npm run build`. `VITE_API_BASE_URL` is public browser configuration, so it must never contain a secret; a rebuild is required after changing it. See [`../docs/ENVIRONMENTS.md`](../docs/ENVIRONMENTS.md) for the complete process.
+
+Before a live web release, follow [`../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md`](../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md) for required service accounts, payment and email setup, hosting, pricing references, browser limitations, and acceptance checks.
+
 See [FUNCTIONALITY_AUDIT.md](FUNCTIONALITY_AUDIT.md) for implemented workflows and advanced backend endpoints that still need dedicated UI screens.
 
 ## Current foundation
